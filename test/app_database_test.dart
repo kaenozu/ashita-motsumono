@@ -185,8 +185,7 @@ void main() {
       }
     });
 
-    final path =
-        '${tempDir.path}${Platform.pathSeparator}ashita_motsumono.db';
+    final path = '${tempDir.path}${Platform.pathSeparator}ashita_motsumono.db';
     final files = [
       File(path),
       File('$path-wal'),
