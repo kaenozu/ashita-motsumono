@@ -43,6 +43,9 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Verify dependency lockfile is unchanged
+        run: git diff --exit-code -- pubspec.lock
+
       - name: Check formatting
         shell: bash
         run: |
