@@ -175,8 +175,51 @@ void main() {
     expect(await db.backupDatabaseFile(), isNull);
   });
 
+  test('primary database deletion failure preserves SQLite sidecars', () async {
+    final tempDir = await Directory.systemTemp.createTemp(
+      'ashita_database_primary_delete_failure_',
+    );
+    addTearDown(() async {
+      if (await tempDir.exists()) {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    final path =
+        '${tempDir.path}${Platform.pathSeparator}ashita_motsumono.db';
+    final files = [
+      File(path),
+      File('$path-wal'),
+      File('$path-shm'),
+      File('$path-journal'),
+    ];
+    for (final file in files) {
+      await file.writeAsString(file.path);
+    }
+
+    final attempted = <String>[];
+    await expectLater(
+      AppDatabase.deleteDatabaseFilesAtPath(
+        path,
+        deleteFile: (file) async {
+          attempted.add(file.path);
+          if (file.path == path) {
+            throw const FileSystemException('injected primary delete failure');
+          }
+          await file.delete();
+        },
+      ),
+      throwsA(isA<FileSystemException>()),
+    );
+
+    expect(attempted, [path]);
+    for (final file in files) {
+      expect(await file.exists(), isTrue, reason: '${file.path} must be preserved');
+    }
+  });
+
   test(
-    'database file deletion attempts every file before reporting failure',
+    'database file deletion attempts every sidecar before reporting failure',
     () async {
       final tempDir = await Directory.systemTemp.createTemp(
         'ashita_database_delete_',
@@ -205,8 +248,8 @@ void main() {
           path,
           deleteFile: (file) async {
             attempted.add(file.path);
-            if (file.path == path) {
-              throw const FileSystemException('injected delete failure');
+            if (file.path == '$path-wal') {
+              throw const FileSystemException('injected WAL delete failure');
             }
             await file.delete();
           },
@@ -215,8 +258,8 @@ void main() {
       );
 
       expect(attempted, files.map((file) => file.path).toList());
-      expect(await File(path).exists(), isTrue);
-      expect(await File('$path-wal').exists(), isFalse);
+      expect(await File(path).exists(), isFalse);
+      expect(await File('$path-wal').exists(), isTrue);
       expect(await File('$path-shm').exists(), isFalse);
       expect(await File('$path-journal').exists(), isFalse);
     },
