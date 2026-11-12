@@ -163,9 +163,30 @@ class AppDatabase extends _$AppDatabase {
     Future<void> Function(File file)? deleteFile,
   }) async {
     final delete = deleteFile ?? (File file) => file.delete();
-    final failures = <String>[];
+    final primaryFile = File(path);
 
-    for (final suffix in _databaseSuffixes) {
+    // If the main DB file cannot be removed, keep its WAL/SHM/journal files.
+    // They may still contain the only recoverable copy of committed writes.
+    try {
+      if (await primaryFile.exists()) {
+        await delete(primaryFile);
+      }
+    } on Object catch (error, stackTrace) {
+      if (kDebugMode) {
+        debugPrint(
+          'AppDatabase: failed to delete primary database file: '
+          '$error\n$stackTrace',
+        );
+      }
+      throw FileSystemException(
+        'Failed to delete primary database file; SQLite sidecars were preserved: '
+        '$error',
+        path,
+      );
+    }
+
+    final failures = <String>[];
+    for (final suffix in _databaseSuffixes.skip(1)) {
       final file = File('$path$suffix');
       try {
         if (await file.exists()) {
@@ -320,6 +341,16 @@ class AppDatabase extends _$AppDatabase {
         // 破損・権限・容量不足などで一部をコピーできなくても、
         // 既に退避できたファイルは復旧証跡として残す。
       }
+    }
+
+    // Sidecars are useful forensic evidence, but they cannot replace the primary
+    // SQLite database file. Never report a recoverable backup without it.
+    if (!copiedPaths.contains(backupBasePath)) {
+      throw FileSystemException(
+        'Failed to copy the primary database file; preserved sidecars: '
+        '${copiedPaths.join(', ')}',
+        backupBasePath,
+      );
     }
     return copiedPaths;
   }

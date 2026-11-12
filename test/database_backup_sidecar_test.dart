@@ -60,4 +60,42 @@ void main() {
     expect(await File(backup).readAsString(), 'db');
     expect(await File('$backup-shm').readAsString(), 'shm');
   });
+  // Sidecar evidence must be retained, but must not be reported as a usable
+  // database backup when the primary database copy fails.
+  test(
+    'a failed primary database copy does not report a recoverable backup',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'ashita_database_primary_backup_failure_',
+      );
+      addTearDown(() async {
+        if (await directory.exists()) {
+          await directory.delete(recursive: true);
+        }
+      });
+
+      final source = '${directory.path}/ashita_motsumono.db';
+      final backup = '${directory.path}/ashita_motsumono_corrupt.db';
+      await File(source).writeAsString('db');
+      await File('$source-wal').writeAsString('wal');
+
+      // A directory at the primary destination forces File.copy() to fail while
+      // the sibling WAL destination remains writable.
+      await Directory(backup).create();
+
+      await expectLater(
+        AppDatabase.backupDatabaseFilesAtPath(source, backup),
+        throwsA(
+          isA<FileSystemException>().having(
+            (error) => error.message,
+            'message',
+            contains('primary database file'),
+          ),
+        ),
+      );
+
+      // Keep partial forensic evidence, but do not return a successful backup.
+      expect(await File('$backup-wal').readAsString(), 'wal');
+    },
+  );
 }
