@@ -321,6 +321,16 @@ class AppDatabase extends _$AppDatabase {
         // 既に退避できたファイルは復旧証跡として残す。
       }
     }
+
+    // Sidecars are useful forensic evidence, but they cannot replace the primary
+    // SQLite database file. Never report a recoverable backup without it.
+    if (!copiedPaths.contains(backupBasePath)) {
+      throw FileSystemException(
+        'Failed to copy the primary database file; preserved sidecars: '
+        '${copiedPaths.join(', ')}',
+        backupBasePath,
+      );
+    }
     return copiedPaths;
   }
 
