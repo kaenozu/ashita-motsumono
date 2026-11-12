@@ -214,7 +214,11 @@ void main() {
 
     expect(attempted, [path]);
     for (final file in files) {
-      expect(await file.exists(), isTrue, reason: '${file.path} must be preserved');
+      expect(
+        await file.exists(),
+        isTrue,
+        reason: '${file.path} must be preserved',
+      );
     }
   });
 
